@@ -9,24 +9,34 @@ public class Column {
     int bx;
     int by;
     int bd;
-    int fy;
+    int fs;
     int fc;
     int cover;
+    double eC;
+    double eS;
+    double ES;
+    String sectionType = "";
+    String bracingType = "";
 
-    public Column(double xDim, double yDim, int bx, int by, int bd, int fy, int fc, int cover){
+    public Column(double xDim, double yDim, int bx, int by, int bd, int fs, int fc, int cover){
         this.xDim = xDim;
         this.yDim = yDim;
         this.bx = bx;
         this.by = by;
         this.bd = bd;
-        this.fy = fy;
+        this.fs = fs;
         this.fc = fc;
         this.cover = cover;
+        this.eC = 0.003;
+        this.eS = 0.0025;
+        this.ES = 200000;
+        this.sectionType = "rectangular";
+        this.bracingType = "braced";
     }
 
     public double columnTension(){
         int nosBars = 2*bx + 2*by - 4;
-        double colNut = -1.0 * nosBars * Math.PI * Math.pow(bd,2) / 4 * fy / 1000;
+        double colNut = -1.0 * nosBars * Math.PI * Math.pow(bd,2) / 4 * fs / 1000;
         return colNut;
     }
 
@@ -36,7 +46,7 @@ public class Column {
         double aGross=xDim*yDim;
         double aSteel=nosBars*Math.PI*Math.pow(bd,2.0)/4.0;
         double aConc=aGross-aSteel;
-        double colSquash=(alpha1*fc*aConc+aSteel*fy)/1000.0;
+        double colSquash=(alpha1*fc*aConc+aSteel*fs)/1000.0;
         return colSquash;
     }
 
@@ -48,7 +58,6 @@ public class Column {
 
         if (by==1) {
             firstBar = yDim / 2.0;
-            lastBar = yDim / 2.0;
             barSpacing = 0;
         } else {
             firstBar=cover+bd/2.0;
@@ -74,6 +83,117 @@ public class Column {
         return colReo;
     }
 
+    public double[] columnSolverKu(double ku){
+        double[][] colReo = this.columnReo();
+        double d = colReo[colReo.length-1][1];
+        double kuD = ku * d;
+        double alpha2 = Math.max(0.67,Math.min(0.85,1.0-0.003*fc));
+        double gamma = Math.max(0.67,Math.min(0.85,1.05-0.007*fc));
+
+        double sectAxialForce = 0.0;
+        double sectMoment = 0.0;
+        int barRows = colReo.length;
+
+        double barZ;
+        double barZp;
+        double barAs;
+        double barStrain;
+        double barStress;
+        double barForce;
+        double barMoment;
+
+        double concForceSub;
+        double concMomentSub;
+
+        double gammaKuD = gamma*kuD;
+        double concZp = yDim/2.0-gammaKuD/2.0;
+        double concAg = gammaKuD*xDim;
+        double alpha2Fc = alpha2*fc;
+        double concForce = concAg*alpha2Fc;
+        double concMoment = concForce * concZp;
+        sectAxialForce += concForce;
+        sectMoment += concMoment;
+
+        for (int i=0 ; i<barRows ; i++){
+            barZ = colReo[i][1];
+            barZp = yDim/2.0-colReo[i][1];
+            barAs = colReo[i][2];
+            barStrain = eC/kuD*(kuD-barZ);
+            barStress = Math.min(fs,Math.max(-fs,ES*barStrain));
+            barForce = barAs*barStress;
+            barMoment = barForce*barZp;
+            if(barStrain>=0){
+                concForceSub=barAs*-alpha2Fc;
+                concMomentSub=concForceSub*barZp;
+                sectAxialForce+=concForceSub;
+                sectMoment+=concMomentSub;
+            }
+            sectAxialForce+=barForce;
+            sectMoment+=barMoment;
+        }
+
+        sectAxialForce = sectAxialForce / 1000.0;
+        sectMoment = sectMoment / 1000000.0;
+
+        double[] sectionCap = {sectAxialForce,sectMoment};
+
+        return sectionCap;
+    }
+
+    public double[][] colInteractionPoints(){
+        double[][] interactionPoints = new double[202][3];
+        double colSquash = this.columnSquash();
+        double colTension = this.columnTension();
+        double[][] colReo = this.columnReo();
+        interactionPoints[0][0] = -1.0;
+        interactionPoints[0][1] = colTension;
+        interactionPoints[0][2] = 0.0;
+        interactionPoints[1][0] = 0.0001;
+        interactionPoints[1][1] = this.columnSolverKu(0.0001)[0];
+        interactionPoints[1][2] = this.columnSolverKu(0.0001)[1];
+        double ku;
+        for(int i=1;i<=100;i++){
+            ku = (double) i/100.0;
+            interactionPoints[i+1][0] = (double) i/100.0;
+            interactionPoints[i+1][1] = this.columnSolverKu(i/100.0)[0];
+            interactionPoints[i+1][2] = this.columnSolverKu(i/100.0)[1];
+        }
+
+        double axialIncrement = colSquash - interactionPoints[101][1];
+        double momentDecrease = -interactionPoints[101][2];
+        double axialForceK1 = interactionPoints[101][1];
+        double momentK1 = interactionPoints[101][2];
+
+        for(int i=1;i<100;i++){
+            ku = Math.round((1 + (double) i/100.0)*100)/100.0;
+            interactionPoints[101+i][0]=ku;
+            interactionPoints[101+i][1]= axialForceK1 + (double) i/100.0 * axialIncrement;
+            interactionPoints[101+i][2]= momentK1 + (double) i/100.0 * momentDecrease;
+        }
+        interactionPoints[201][0] = 2.0;
+        interactionPoints[201][1] = colSquash;
+        interactionPoints[201][2] = 0.0;
+        return interactionPoints;
+    }
+
+    public double[] kuSolverPureMoment(){
+        double ku = 0.0001;
+        double axialForce = this.columnTension();
+        int i=1;
+        while(axialForce<0 && i<10000){
+            ku = (double) i/10000.0;
+            axialForce = this.columnSolverKu(ku)[0];
+            i++;
+        }
+        double kuPureMoment = (double) i/10000.0;
+        double momentCap = this.columnSolverKu(kuPureMoment)[1];
+        double[] capacity = new double[2];
+        capacity[0] = kuPureMoment;
+        capacity[1] = momentCap;
+
+        return capacity;
+    }
+
     public void printColTension(){
         double roundedNut = Math.round(this.columnTension()*10)/10.0;
         System.out.println("Column Tension Capacity = " + roundedNut + "kN");
@@ -82,6 +202,12 @@ public class Column {
     public void printColSquash(){
         double roundedNuc = Math.round(this.columnSquash()*10)/10.0;
         System.out.println("Column Squash Capacity = " + roundedNuc + "kN");
+    }
+
+    public void printColMoment(){
+        double roundedKu = Math.round(this.kuSolverPureMoment()[0]*100)/100.0;
+        double roundedMuc = Math.round(this.kuSolverPureMoment()[1]*10)/10.0;
+        System.out.println("Column Moment Capacity = " + roundedMuc + "kN-m; ku = " + roundedKu);
     }
 
     public void printColReo(){
@@ -100,4 +226,144 @@ public class Column {
                     reoArea + "sq.mm");
         }
     }
+
+    public void printColSectCapacity(){
+        double[][] tempCapHolder = this.colInteractionPoints();
+        double roundedAxialCap;
+        double roundedMomentCap;
+        double tempKu;
+        for(int i=0;i<tempCapHolder.length;i++){
+            tempKu = tempCapHolder[i][0];
+            roundedAxialCap = Math.round(10*tempCapHolder[i][1])/10.0;
+            roundedMomentCap = Math.round(10*tempCapHolder[i][2])/10.0;
+            System.out.println("Point " + (i+1) +": ku = " + tempKu + ": Axial = " + roundedAxialCap + "kN: Moment = " +
+                    roundedMomentCap + "kN-m");
+        }
+    }
+
+    /**
+     *
+     * @return radius of gyration of the section
+     */
+    public double concreteR(){
+        if(sectionType.equals("circular")){
+            return 0.25*xDim;
+        }else if(sectionType.equals("rectangular")){
+            return 0.3*xDim;
+        }else{
+            return 0.01*xDim;
+        }
+    }
+
+    public double concElasticCritBuckling(double effectiveLength, double deadLoad, double liveLoad){
+        double betaD = deadLoad / (deadLoad + liveLoad);
+        double[][] colReo = this.columnReo();
+        double effectiveD = colReo[colReo.length-1][1];
+        double[] sectionBalanceCap = columnSolverKu(0.545);
+        double balanceMomentCap = sectionBalanceCap[1] * 1000000.0;
+        double criticalBucklingLoad = (Math.pow(Math.PI,2.0)/Math.pow(effectiveLength,2.0))*
+                (182.0*effectiveD*0.6*balanceMomentCap/(1.0+betaD))/1000.0;
+        return criticalBucklingLoad;
+    }
+
+    public double columnKm(double moment1, double moment2){
+        return Math.max(0.4,Math.min(1.0,0.6-0.4*moment1/moment2));
+    }
+
+    public double columnDeltaB(double colKm, double axialN, double colCriticalLoad){
+        return Math.max(1.0,colKm/(1-axialN/colCriticalLoad));
+    }
+
+    /**
+     * Calculates the column slender limit
+     * @param axialN
+     * @return
+     */
+    public double columnSlender(double axialN, double moment1, double moment2){
+        double colSquash = this.columnSquash();
+        double alphaC=0;
+        double stockyLimit = 22.0;
+        if(axialN<=0.0){
+            axialN = 0.1;
+        }
+        if(bracingType.equals("braced")){
+            if((axialN/(0.6*colSquash))>=0.15 && (axialN/(0.6*colSquash))<0.9){
+                alphaC=Math.sqrt(2.25-2.5*axialN/(0.6*colSquash));
+            }else if((axialN/(0.6*colSquash))<0.15){
+                alphaC=Math.sqrt(1/(3.5*axialN/(0.6*colSquash)));
+            }else if(axialN/(0.6*colSquash)>=0.9){
+                alphaC=0;
+            }
+            stockyLimit=Math.max(25.0,alphaC*(38.0-15.0/fc)*(1.0+moment1/moment2));
+        }
+        return stockyLimit;
+    }
+
+    public double columnCapacitySolver(double betaD, double effectiveLength){
+        double colAxialCapacity = 0.1;
+        double colBetaD = betaD;
+        double colDeadLoad = 1.0;
+        double colLiveLoad = (1.0-colBetaD)/colBetaD;
+        double colEffectiveLength = effectiveLength;
+        double colRadius = this.concreteR();
+        double colSlenderness = colEffectiveLength/colRadius;
+        double[][] colInteraction = colInteractionPoints();
+        double colElasticBuckCap = this.concElasticCritBuckling(colEffectiveLength,colDeadLoad,colLiveLoad);
+        //System.out.println("Elastic Buckling Cap = " + colElasticBuckCap);
+        double mColKm = columnKm(-1.0,1.0);
+        //System.out.println("Col km = " + mColKm);
+        double colDeltaB = 1.0;
+        double colMagnifiedMinMoment;
+        int compressionPoints = 0;
+        int minKuPoint = 202;
+        int maxKuPoint = -1;
+        //System.out.println("Slenderness = " + colSlenderness);
+        for(int i=0;i<colInteraction.length;i++){
+            if(colInteraction[i][1]>=0.0 && colInteraction[i][1]<=colElasticBuckCap){
+                compressionPoints++;
+                if(i<minKuPoint){
+                    minKuPoint=i;
+                }
+                if(i>maxKuPoint){
+                    maxKuPoint=i;
+                }
+            }
+        }
+        //System.out.println("minKuPoint = " + minKuPoint);
+        //System.out.println("maxKuPoint = " + maxKuPoint);
+        for(int i=minKuPoint;i<=maxKuPoint;i++){
+            //colCapSolver[i-minKuPoint][0]=colInteraction[i][0];
+            //colCapSolver[i-minKuPoint][1]=colInteraction[i][1];
+            //colCapSolver[i-minKuPoint][2]=colInteraction[i][2];
+            //System.out.println("i = " + i);
+            //System.out.print(colInteraction[i][0] + " " + colInteraction[i][1] + " " + colInteraction[i][2]);
+            double slendernessLimit = this.columnSlender(colInteraction[i][1],-1.0,1.0);
+        //    System.out.print(" Slenderness Limit = " + slendernessLimit);
+            if(colSlenderness<=slendernessLimit){
+                colDeltaB = 1.0;
+            }else{
+                colDeltaB = columnDeltaB(mColKm,colInteraction[i][1],colElasticBuckCap);
+            }
+        //    System.out.print(" deltaB = " + colDeltaB);
+            colMagnifiedMinMoment = colInteraction[i][1]*0.05*xDim/1000.0*colDeltaB;
+        //    System.out.println(" Magnigied Moment = " + colMagnifiedMinMoment);
+            if(colMagnifiedMinMoment<=colInteraction[i][2]){
+                colAxialCapacity = colInteraction[i][1];
+            }
+        }
+        return colAxialCapacity;
+    }
+
+//            for i in range(len(cap_solver)):
+//            if float(le)/float(concrete_r('rectangular',d))<=concrete_slender('braced',fc,cap_solver[i][1],squash_load):
+//    conc_del_b=1.0
+//            else:
+//    conc_del_b=concrete_delta_b(km,cap_solver[i][1],Nc)
+//    magnified_min_moment=cap_solver[i][1]*0.05*d*10**-3*conc_del_b
+//        if magnified_min_moment<=cap_solver[i][2]:
+//    N_cap=cap_solver[i][1]
+//            #print 'le = '+str(le)
+//    #print 'r = '+str(concrete_r('rectangular',d))
+//            #print 'le/r = '+str(float(le)/float(concrete_r('rectangular',d)))
+//            return N_cap
 }
