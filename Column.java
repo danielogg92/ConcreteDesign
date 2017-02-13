@@ -247,11 +247,11 @@ public class Column {
      */
     public double concreteR(){
         if(sectionType.equals("circular")){
-            return 0.25*xDim;
+            return 0.25*yDim;
         }else if(sectionType.equals("rectangular")){
-            return 0.3*xDim;
+            return 0.3*yDim;
         }else{
-            return 0.01*xDim;
+            return 0.01*yDim;
         }
     }
 
@@ -309,15 +309,12 @@ public class Column {
         double colSlenderness = colEffectiveLength/colRadius;
         double[][] colInteraction = colInteractionPoints();
         double colElasticBuckCap = this.concElasticCritBuckling(colEffectiveLength,colDeadLoad,colLiveLoad);
-        //System.out.println("Elastic Buckling Cap = " + colElasticBuckCap);
         double mColKm = columnKm(-1.0,1.0);
-        //System.out.println("Col km = " + mColKm);
         double colDeltaB = 1.0;
         double colMagnifiedMinMoment;
         int compressionPoints = 0;
         int minKuPoint = 202;
         int maxKuPoint = -1;
-        //System.out.println("Slenderness = " + colSlenderness);
         for(int i=0;i<colInteraction.length;i++){
             if(colInteraction[i][1]>=0.0 && colInteraction[i][1]<=colElasticBuckCap){
                 compressionPoints++;
@@ -329,41 +326,18 @@ public class Column {
                 }
             }
         }
-        //System.out.println("minKuPoint = " + minKuPoint);
-        //System.out.println("maxKuPoint = " + maxKuPoint);
         for(int i=minKuPoint;i<=maxKuPoint;i++){
-            //colCapSolver[i-minKuPoint][0]=colInteraction[i][0];
-            //colCapSolver[i-minKuPoint][1]=colInteraction[i][1];
-            //colCapSolver[i-minKuPoint][2]=colInteraction[i][2];
-            //System.out.println("i = " + i);
-            //System.out.print(colInteraction[i][0] + " " + colInteraction[i][1] + " " + colInteraction[i][2]);
             double slendernessLimit = this.columnSlender(colInteraction[i][1],-1.0,1.0);
-        //    System.out.print(" Slenderness Limit = " + slendernessLimit);
             if(colSlenderness<=slendernessLimit){
                 colDeltaB = 1.0;
             }else{
                 colDeltaB = columnDeltaB(mColKm,colInteraction[i][1],colElasticBuckCap);
             }
-        //    System.out.print(" deltaB = " + colDeltaB);
             colMagnifiedMinMoment = colInteraction[i][1]*0.05*xDim/1000.0*colDeltaB;
-        //    System.out.println(" Magnigied Moment = " + colMagnifiedMinMoment);
             if(colMagnifiedMinMoment<=colInteraction[i][2]){
                 colAxialCapacity = colInteraction[i][1];
             }
         }
         return colAxialCapacity;
     }
-
-//            for i in range(len(cap_solver)):
-//            if float(le)/float(concrete_r('rectangular',d))<=concrete_slender('braced',fc,cap_solver[i][1],squash_load):
-//    conc_del_b=1.0
-//            else:
-//    conc_del_b=concrete_delta_b(km,cap_solver[i][1],Nc)
-//    magnified_min_moment=cap_solver[i][1]*0.05*d*10**-3*conc_del_b
-//        if magnified_min_moment<=cap_solver[i][2]:
-//    N_cap=cap_solver[i][1]
-//            #print 'le = '+str(le)
-//    #print 'r = '+str(concrete_r('rectangular',d))
-//            #print 'le/r = '+str(float(le)/float(concrete_r('rectangular',d)))
-//            return N_cap
 }
