@@ -4,6 +4,7 @@ package com.company;
  * Created by danie on 04/02/2017.
  */
 public class Column {
+
     double xDim;
     double yDim;
     int bx;
@@ -15,10 +16,14 @@ public class Column {
     double eC;
     double eS;
     double ES;
+    double betaD;
+    double effectiveLength;
     String sectionType = "";
     String bracingType = "";
+    public static final String LOG_TAG = Column.class.getSimpleName();
 
-    public Column(double xDim, double yDim, int bx, int by, int bd, int fs, int fc, int cover){
+    public Column(double xDim, double yDim, int bx, int by, int bd, int fs, int fc, int cover, double betaD,
+                  double effectiveLength){
         this.xDim = xDim;
         this.yDim = yDim;
         this.bx = bx;
@@ -30,8 +35,11 @@ public class Column {
         this.eC = 0.003;
         this.eS = 0.0025;
         this.ES = 200000;
+        this.betaD = betaD;
+        this.effectiveLength = effectiveLength;
         this.sectionType = "rectangular";
         this.bracingType = "braced";
+
     }
 
     public double columnTension(){
@@ -255,8 +263,10 @@ public class Column {
         }
     }
 
-    public double concElasticCritBuckling(double effectiveLength, double deadLoad, double liveLoad){
-        double betaD = deadLoad / (deadLoad + liveLoad);
+    public double concElasticCritBuckling(){
+        double colDeadLoad = 1.0;
+        double colLiveLoad = (1.0-betaD)/betaD;
+//        double betaD = deadLoad / (deadLoad + liveLoad);
         double[][] colReo = this.columnReo();
         double effectiveD = colReo[colReo.length-1][1];
         double[] sectionBalanceCap = columnSolverKu(0.545);
@@ -299,16 +309,15 @@ public class Column {
         return stockyLimit;
     }
 
-    public double columnCapacitySolver(double betaD, double effectiveLength){
+    public double columnCapacitySolver(){
         double colAxialCapacity = 0.1;
-        double colBetaD = betaD;
         double colDeadLoad = 1.0;
-        double colLiveLoad = (1.0-colBetaD)/colBetaD;
+        double colLiveLoad = (1.0-betaD)/betaD;
         double colEffectiveLength = effectiveLength;
         double colRadius = this.concreteR();
         double colSlenderness = colEffectiveLength/colRadius;
         double[][] colInteraction = colInteractionPoints();
-        double colElasticBuckCap = this.concElasticCritBuckling(colEffectiveLength,colDeadLoad,colLiveLoad);
+        double colElasticBuckCap = this.concElasticCritBuckling();
         double mColKm = columnKm(-1.0,1.0);
         double colDeltaB = 1.0;
         double colMagnifiedMinMoment;
@@ -339,5 +348,86 @@ public class Column {
             }
         }
         return colAxialCapacity;
+    }
+
+    public void printColCapacity() {
+        double roundedNc = Math.round(this.columnCapacitySolver() * 10) / 10.0;
+        System.out.println("Column Capacity = " + roundedNc + "kN");
+    }
+
+    public String colCapacityToString(){
+        double roundedNc = Math.round(this.columnCapacitySolver() * 10) / 10.0;
+        String colCapacityString = Double.toString(roundedNc);
+        colCapacityString = colCapacityString + " kN";
+        return colCapacityString;
+    }
+
+    public void columnCapacitySolverWithCalcs(){
+        System.out.println("");
+        System.out.println("DISPLAYING CALCULATIONS FOR COLUMN CAPACITY");
+        System.out.println("xDim = " + xDim);
+        System.out.println("yDim = " + yDim);
+        System.out.println("bx = " + bx);
+        System.out.println("by = " + by);
+        System.out.println("bd = " + bd);
+        System.out.println("fc = " + fc);
+        System.out.println("betaD = " + betaD);
+        System.out.println("effective length = " + effectiveLength);
+        System.out.println("section type = " + sectionType);
+        System.out.println("bracing type = " + bracingType);
+        double colAxialCapacity = 0.1;
+        double colDeadLoad = 1.0;
+        double colLiveLoad = (1.0-betaD)/betaD;
+        double colEffectiveLength = effectiveLength;
+        double colRadius = this.concreteR();
+        System.out.println("radius = " + Math.round(colRadius*10)/10.0);
+        double colSlenderness = colEffectiveLength/colRadius;
+        System.out.println("Le/r = " + Math.round(colSlenderness*10)/10.0);
+        double[][] colInteraction = colInteractionPoints();
+        double colElasticBuckCap = this.concElasticCritBuckling();
+        System.out.println("Elastic Buckling Cap = " + Math.round(colElasticBuckCap*10)/10.0);
+        double mColKm = columnKm(-1.0,1.0);
+        System.out.println("km = " + mColKm);
+        double colDeltaB = 1.0;
+        double colDeltaBFinal = 1.0;
+        double colMagnifiedMinMoment;
+        double colMinMimomentFinal = 0.1;
+        double colMagnifiedMinMomentFinal = 0.1;
+        double colMomentCapciatyFinal = 0.1;
+        int compressionPoints = 0;
+        int minKuPoint = 202;
+        int maxKuPoint = -1;
+        for(int i=0;i<colInteraction.length;i++){
+            if(colInteraction[i][1]>=0.0 && colInteraction[i][1]<=colElasticBuckCap){
+                compressionPoints++;
+                if(i<minKuPoint){
+                    minKuPoint=i;
+                }
+                if(i>maxKuPoint){
+                    maxKuPoint=i;
+                }
+            }
+        }
+        for(int i=minKuPoint;i<=maxKuPoint;i++){
+            double slendernessLimit = this.columnSlender(colInteraction[i][1],-1.0,1.0);
+            if(colSlenderness<=slendernessLimit){
+                colDeltaB = 1.0;
+            }else{
+                colDeltaB = columnDeltaB(mColKm,colInteraction[i][1],colElasticBuckCap);
+            }
+            colMagnifiedMinMoment = colInteraction[i][1]*0.05*xDim/1000.0*colDeltaB;
+            if(colMagnifiedMinMoment<=colInteraction[i][2]){
+                colAxialCapacity = colInteraction[i][1];
+                colDeltaBFinal = colDeltaB;
+                colMinMimomentFinal = colInteraction[i][1]*0.05*xDim/1000.0;
+                colMagnifiedMinMomentFinal = colMagnifiedMinMoment;
+                colMomentCapciatyFinal = colInteraction[i][2];
+            }
+        }
+        System.out.println("column deltaB = " + Math.round(colDeltaBFinal*10)/10.0);
+        System.out.println("column min moment = " + Math.round(colMinMimomentFinal*10)/10.0);
+        System.out.println("column magnified min moment = " + Math.round(colMagnifiedMinMomentFinal*10)/10.0);
+        System.out.println("column moment capacity = " + Math.round(colMomentCapciatyFinal*10)/10.0);
+        System.out.println("column axial capacity = " + Math.round(colAxialCapacity*10)/10.0);
     }
 }
