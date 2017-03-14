@@ -1,15 +1,21 @@
 package com.company;
 
+import java.util.ArrayList;
+
 /**
  * Created by danie on 04/02/2017.
  */
 public class Column {
 
+    String colName = "";
     double xDim;
     double yDim;
     int bx;
     int by;
+    int mNosBars;
     int bd;
+    int mTieSize;
+    int mTieSpacing;
     int fs;
     int fc;
     int cover;
@@ -18,16 +24,22 @@ public class Column {
     double ES;
     double betaD;
     double effectiveLength;
+    double mColumnLength;
     String sectionType = "";
     String bracingType = "";
+    String mBarCode = "AU";
+    ArrayList<Integer> mBarArray;
+
     public static final String LOG_TAG = Column.class.getSimpleName();
 
-    public Column(double xDim, double yDim, int bx, int by, int bd, int fs, int fc, int cover, double betaD,
-                  double effectiveLength){
+    public Column(String colName, double xDim, double yDim, int bx, int by, int bd, int fs, int fc, int cover, double betaD,
+                  double effectiveLength, double columnLength){
+        this.colName = colName;
         this.xDim = xDim;
         this.yDim = yDim;
         this.bx = bx;
         this.by = by;
+        mNosBars = 2*(bx+by)-4;
         this.bd = bd;
         this.fs = fs;
         this.fc = fc;
@@ -37,9 +49,136 @@ public class Column {
         this.ES = 200000;
         this.betaD = betaD;
         this.effectiveLength = effectiveLength;
+        mColumnLength = columnLength;
         this.sectionType = "rectangular";
         this.bracingType = "braced";
+        mBarArray = this.barDesignation(mBarCode);
+        mTieSize = this.findTieSize();
+        mTieSpacing = this.tieSpacing();
+    }
 
+    public Column(String colName, double xDim, double yDim){
+        this.colName = colName;
+        this.xDim = xDim;
+        this.yDim = yDim;
+        this.bx = this.columnBarNumber(xDim);
+        this.by = this.columnBarNumber(yDim);
+        mNosBars = 2*(bx+by)-4;
+
+        this.fs = 500;
+        this.fc = 50;
+        this.cover = 50;
+        this.eC = 0.003;
+        this.eS = 0.0025;
+        this.ES = 200000;
+        this.betaD = 0.85;
+        this.effectiveLength = 0.85 * 3750;
+        mColumnLength = effectiveLength / 0.85;
+        this.sectionType = "rectangular";
+        this.bracingType = "braced";
+        mBarArray = this.barDesignation(mBarCode);
+        this.bd = this.findBarSize(0.01);
+        mTieSize = this.findTieSize();
+        mTieSpacing = this.tieSpacing();
+    }
+
+    public String setColName(String colName){
+        this.colName = colName;
+        return this.colName;
+    }
+
+    public double setColXDim(double xDim){
+        this.xDim = xDim;
+        return this.xDim;
+    }
+
+    public double setColYDim(double yDim){
+        this.yDim = yDim;
+        return this.yDim;
+    }
+
+    public int setBarsX(int bx){
+        this.bx = bx;
+        return this.bx;
+    }
+
+    public int setBarsY(int by){
+        this.by = by;
+        return this.by;
+    }
+
+    public int setBarsBd(int bd){
+        this.bd = bd;
+        return this.bd;
+    }
+
+    public int setBarFs(int fs){
+        this.fs = fs;
+        return fs;
+    }
+
+    public int setConcFc(int fc){
+        this.fc = fc;
+        return fc;
+    }
+
+    public int setBarCover(int cover){
+        this.cover = cover;
+        return cover;
+    }
+
+    public double setConcEx(double eC){
+        this.eC = eC;
+        return eC;
+    }
+
+    public double setSteelEs(double eS){
+        this.eS = eS;
+        return eS;
+    }
+
+    public double setSteelES(double ES){
+        //This ES refers to the Youngs modulus of the steel
+        this.ES = ES;
+        return ES;
+    }
+
+    public double setBetaD(double betaD){
+        this.betaD = betaD;
+        return betaD;
+    }
+
+    public double setEffectiveLength(double effectiveLength){
+        this.effectiveLength = effectiveLength;
+        return effectiveLength;
+    }
+
+    public void setmColumnLength(double colLength){
+        mColumnLength = colLength;
+    }
+
+    public String setSectionType(String sectionType){
+        this.sectionType = sectionType;
+        return this.sectionType;
+    }
+
+    public String setBracingType(String bracingType){
+        this.bracingType = bracingType;
+        return this.bracingType;
+    }
+
+    public String setBarCode(String barCode){
+        mBarCode = barCode;
+        return mBarCode;
+    }
+
+    public int setTieSize(int tieSize){
+        mTieSize = tieSize;
+        return mTieSize;
+    }
+
+    public void setTieSpacing(int tieSpacing){
+        mTieSpacing = tieSpacing;
     }
 
     public double columnTension(){
@@ -202,6 +341,14 @@ public class Column {
         return capacity;
     }
 
+    public void printLineBreak(){
+        System.out.print("\n");
+    }
+
+    public void printColName(){
+        System.out.println("COLUMN " + this.colName);
+    }
+
     public void printColTension(){
         double roundedNut = Math.round(this.columnTension()*10)/10.0;
         System.out.println("Column Tension Capacity = " + roundedNut + "kN");
@@ -355,6 +502,22 @@ public class Column {
         System.out.println("Column Capacity = " + roundedNc + "kN");
     }
 
+    public void printTieSize(){
+        System.out.println("Tie Size = " + mTieSize);
+    }
+
+    public void printTieSpacing(){
+        System.out.println("Tie Spacing = " + mTieSpacing);
+    }
+
+    public void printEffectiveLength(){
+        System.out.println("Effective Length = " + effectiveLength);
+    }
+
+    public void printColumnLength(){
+        System.out.println("Column Length = " + mColumnLength);
+    }
+
     public String colCapacityToString(){
         double roundedNc = Math.round(this.columnCapacitySolver() * 10) / 10.0;
         String colCapacityString = Double.toString(roundedNc);
@@ -430,4 +593,88 @@ public class Column {
         System.out.println("column moment capacity = " + Math.round(colMomentCapciatyFinal*10)/10.0);
         System.out.println("column axial capacity = " + Math.round(colAxialCapacity*10)/10.0);
     }
+
+    public int columnBarNumber(double dim) {
+        int barNumber = (int) Math.max(2, ((dim - 100) / 150) + 1);
+        return barNumber;
+    }
+
+    public ArrayList<Integer> barDesignation(String barCode){
+        ArrayList<Integer> barArray = new ArrayList<Integer>();
+
+        if(mBarCode.equals("AU")){
+            barArray.add(10);
+            barArray.add(12);
+            barArray.add(16);
+            barArray.add(20);
+            barArray.add(24);
+            barArray.add(28);
+            barArray.add(32);
+            barArray.add(36);
+            barArray.add(40);
+        }
+        return barArray;
+    }
+
+    public int findBarSize(double reoPercent){
+        double areaGross = xDim * yDim;
+        double areaSteelReq = reoPercent * areaGross;
+        double areaSteel = 0;
+        int tempBarSize = 0;
+        int barSize = mBarArray.get(mBarArray.size()-1);
+        for(int i=0;i<mBarArray.size();i++){
+            tempBarSize = mBarArray.get(i);
+            areaSteel = mNosBars * Math.PI * tempBarSize * tempBarSize / 4.0;
+            if(areaSteel>areaSteelReq && tempBarSize<barSize){
+                barSize = tempBarSize;
+            }
+        }
+        return barSize;
+    }
+
+    public int findTieSize(){
+        int tieSize = 0;
+        if(bd<=28){
+            tieSize = 10;
+        }else if(bd>28 && bd<=36){
+            tieSize = 12;
+        }else if(bd>36){
+            tieSize = 16;
+        }
+        return tieSize;
+    }
+
+    public int tieSpacing(){
+        int tieSpac = 300;
+        if(15*bd<tieSpac){
+            tieSpac = 15*bd;
+        }
+        if((int) Math.min(xDim,yDim) < tieSpac){
+            tieSpac = (int) Math.min(xDim,yDim);
+        }
+        return tieSpac;
+    }
+
+    public double columnVolume(){
+        double colVolumne = 0;
+        colVolumne = xDim * yDim * mColumnLength / 1000000000;
+        return colVolumne;
+    }
+
+    public double columnReoMass(){
+        double reoMass = 0;
+        reoMass = mNosBars * Math.PI * bd * bd / 4 * mColumnLength / 1000000000 * 8000;
+        return 1.3 * reoMass;
+    }
+
+    public double columnReoRate(){
+        double reoRate = this.columnReoMass() / this.columnVolume();
+        return reoRate;
+    }
+
+    public void printColumnReoRate(){
+        double roundedRate = Math.round(this.columnReoRate()*10)/10.0;
+        System.out.println("Reo Rate = " + roundedRate + " kg/cu.m");
+    }
+
 }
