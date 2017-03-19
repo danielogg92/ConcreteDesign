@@ -1,6 +1,7 @@
 package com.company;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Created by danie on 04/02/2017.
@@ -153,7 +154,7 @@ public class Column {
         return effectiveLength;
     }
 
-    public void setmColumnLength(double colLength){
+    public void setColumnLength(double colLength){
         mColumnLength = colLength;
     }
 
@@ -228,6 +229,39 @@ public class Column {
             }
         }
         return colReo;
+    }
+
+    public double[][] columnReoRot(){
+        double[][] colReoRot = new double[bx][3];
+        double firstBar;
+        double lastBar;
+        double barSpacing;
+
+        if (bx==1) {
+            firstBar = xDim / 2.0;
+            barSpacing = 0;
+        } else {
+            firstBar=cover+bd/2.0;
+            lastBar=xDim-cover-bd/2.0;
+            barSpacing=(lastBar-firstBar)/(bx-1.0);
+        }
+
+        for(int i=0;i<bx;i++){
+            if(bx==1){
+                colReoRot[0][0] = 1;
+                colReoRot[0][1] = firstBar+i*barSpacing;
+                colReoRot[0][2] = by*Math.PI*Math.pow(bd,2)/4.0;
+            } else if (bx!=1 && (i==0 || i==(bx-1))) {
+                colReoRot[i][0] = by;
+                colReoRot[i][1] = firstBar+i*barSpacing;
+                colReoRot[i][2] = by*Math.PI*Math.pow(bd,2)/4.0;
+            } else if (i!=0 && i!=(bx-1) && by>1){
+                colReoRot[i][0] = 2;
+                colReoRot[i][1] = firstBar+i*barSpacing;
+                colReoRot[i][2] = 2*Math.PI*Math.pow(bd,2)/4.0;
+            }
+        }
+        return colReoRot;
     }
 
     public double[] columnSolverKu(double ku){
@@ -413,7 +447,6 @@ public class Column {
     public double concElasticCritBuckling(){
         double colDeadLoad = 1.0;
         double colLiveLoad = (1.0-betaD)/betaD;
-//        double betaD = deadLoad / (deadLoad + liveLoad);
         double[][] colReo = this.columnReo();
         double effectiveD = colReo[colReo.length-1][1];
         double[] sectionBalanceCap = columnSolverKu(0.545);
@@ -500,6 +533,12 @@ public class Column {
     public void printColCapacity() {
         double roundedNc = Math.round(this.columnCapacitySolver() * 10) / 10.0;
         System.out.println("Column Capacity = " + roundedNc + "kN");
+    }
+
+    public void printColDetails(){
+        System.out.println((int)this.xDim + "mm x " + (int)this.yDim + "mm");
+        System.out.println(this.mNosBars + "/" + this.bd + "mm Dia Bars");
+        System.out.println(this.mTieSize + "mm Dia Ties at " + this.mTieSpacing + "mm Crs");
     }
 
     public void printTieSize(){
@@ -595,7 +634,7 @@ public class Column {
     }
 
     public int columnBarNumber(double dim) {
-        int barNumber = (int) Math.max(2, ((dim - 100) / 150) + 1);
+        int barNumber = (int) Math.max(2, ((dim - 100) / 180) + 1);
         return barNumber;
     }
 
@@ -663,8 +702,84 @@ public class Column {
 
     public double columnReoMass(){
         double reoMass = 0;
-        reoMass = mNosBars * Math.PI * bd * bd / 4 * mColumnLength / 1000000000 * 8000;
-        return 1.3 * reoMass;
+        double tieMass = 0;
+        double[][] tempBarTiesDetails = this.barAndTieDetails();
+        int nosTies = 0;
+        for(int i=0;i<tempBarTiesDetails.length;i++){
+            if(tempBarTiesDetails[i][6]>nosTies){
+                nosTies = (int) tempBarTiesDetails[i][6];
+            }
+        }
+        double[][] tieMassData = new double[nosTies][7];
+        for(int i=0;i<tieMassData.length;i++){
+            tieMassData[i][0]=i+1;
+        }
+        int crossRefTie = 0;
+        int placeHolderNodeNo = 0;
+        for(int i=0;i<tempBarTiesDetails.length;i++){
+            crossRefTie = (int) tempBarTiesDetails[i][6];
+            tieMassData[crossRefTie - 1][1] = tieMassData[crossRefTie - 1][1] + 1;
+            placeHolderNodeNo = (int) tieMassData[crossRefTie - 1][1] + 1;
+            tieMassData[crossRefTie - 1][placeHolderNodeNo] = i + 1;
+        }
+        double nodeLength = 0;
+        int node1 = 0;
+        int node2 = 0;
+        int nosIterations = 0;
+        int lineNumbers = 0;
+        double totalTieLength = 0;
+        int nosTieSets = 0;
+        double x1 = 0;
+        double x2 = 0;
+        double y1 = 0;
+        double y2 = 0;
+        for(int i=0;i<nosTies;i++){
+            nosIterations = (int) tieMassData[i][1];
+            lineNumbers = (int) tieMassData[i][1];
+            if(lineNumbers==2){
+                lineNumbers=lineNumbers-1;
+            }
+            for(int j=0;j<lineNumbers;j++){
+                if(j==2 && lineNumbers==4){
+                    node1 = (int) tieMassData[i][j+3];
+                }else if(j==3 && lineNumbers == 4){
+                    node1 = (int) tieMassData[i][j+1];
+                }else{
+                    node1 = (int)tieMassData[i][j+2];
+                }
+                x1 = tempBarTiesDetails[node1-1][3];
+                y1 = tempBarTiesDetails[node1-1][4];
+
+                if(j==(lineNumbers-1) && lineNumbers>1){
+                    node2 = (int) tieMassData[i][2];
+                    x2 = tempBarTiesDetails[node2-1][3];
+                    y2 = tempBarTiesDetails[node2-1][4];
+                }else if(j==1 && lineNumbers==4 ){
+                    node2 = (int) tieMassData[i][j+4];
+                    x2 = tempBarTiesDetails[node2-1][3];
+                    y2 = tempBarTiesDetails[node2-1][4];
+                }else if(j==2 && lineNumbers==4 ){
+                    node2 = (int) tieMassData[i][j+2];
+                    x2 = tempBarTiesDetails[node2-1][3];
+                    y2 = tempBarTiesDetails[node2-1][4];
+                }else{
+                    node2 = (int) tieMassData[i][j+3];
+                    x2 = tempBarTiesDetails[node2-1][3];
+                    y2 = tempBarTiesDetails[node2-1][4];
+                }
+                nodeLength = this.length2Points(x1,x2,y1,y2);
+                tieMassData[i][6] += nodeLength;
+            }
+            tieMassData[i][6] += Math.PI * (bd + mTieSize) + 2 * Math.max(100,10*mTieSize);
+            totalTieLength += tieMassData[i][6];
+        }
+
+        nosTieSets = (int) (this.columnLapLength() / (mTieSpacing/2) + (mColumnLength - this.columnLapLength())
+                / mTieSpacing) + 2;
+
+        tieMass = nosTieSets * totalTieLength * Math.PI * Math.pow(mTieSize,2) / 4 / 1000000000 * 8000;
+        reoMass = mNosBars * Math.PI * bd * bd / 4 * (mColumnLength + this.columnLapLength()) / 1000000000 * 8000;
+        return reoMass + tieMass;
     }
 
     public double columnReoRate(){
@@ -672,9 +787,145 @@ public class Column {
         return reoRate;
     }
 
+    public double columnLapLength(){
+        double colLapLen = 0;
+        if(this.bd<=12){
+            colLapLen = 500;
+        }else if(this.bd>12 && this.bd<=16){
+            colLapLen = 600;
+        }else if(this.bd>16 && this.bd<=20){
+            colLapLen = 800;
+        }else if(this.bd>20 && this.bd<=24){
+            colLapLen = 1000;
+        }else if(this.bd>24 && this.bd<=28){
+            colLapLen = 1200;
+        }else if(this.bd>28 && this.bd<=32){
+            colLapLen = 1350;
+        }else if(this.bd>32 && this.bd<=36){
+            colLapLen = 1500;
+        }else{
+            colLapLen = 2000;
+        }
+        return colLapLen;
+    }
+
     public void printColumnReoRate(){
         double roundedRate = Math.round(this.columnReoRate()*10)/10.0;
         System.out.println("Reo Rate = " + roundedRate + " kg/cu.m");
     }
 
+    public double[][] barAndTieDetails(){
+        double[][] barTieDetails = new double[mNosBars][7];
+        double[][] barDataX = this.columnReo();
+        double[][] barDataY = this.columnReoRot();
+        int barCount = 0;
+        int k=0;
+        int tieCount = 2;
+        boolean isTriType = false;
+        if((bx==3 || by==3) && bx!=2 && by!=2){
+            isTriType = true;
+        }
+
+        for(int i=0;i<bx;i++){
+            barTieDetails[barCount][0] = barCount + 1;
+            barTieDetails[barCount][1] = 1;
+            barTieDetails[barCount][2] = i + 1;
+            barTieDetails[barCount][3] = barDataY[i][1];
+            barTieDetails[barCount][4] = barDataX[0][1];
+            if(barTieDetails[barCount][2]==1||barTieDetails[barCount][2]==bx){
+                barTieDetails[barCount][5] = 0;
+                barTieDetails[barCount][6] = 1;
+            }else if((isTriType) && ((barTieDetails[barCount][2]==2) || (barTieDetails[barCount][2]==bx-1))){
+                barTieDetails[barCount][5] = 1;
+                barTieDetails[barCount][6] = tieCount;
+                tieCount++;
+            }else{
+                barTieDetails[barCount][5] = 2;
+                barTieDetails[barCount][6] = tieCount;
+                tieCount++;
+            }
+            barCount++;
+        }
+        for(int i=0;i<(by-2);i++){
+            for(int j=0;j<2;j++){
+                barTieDetails[barCount][0] = barCount + 1;
+                barTieDetails[barCount][1] = i + 2;
+                barTieDetails[barCount][4] = barDataX[i+1][1];
+                if(j==0){
+                    barTieDetails[barCount][2] = 1;
+                    barTieDetails[barCount][3] = barDataY[0][1];
+                }else{
+                    barTieDetails[barCount][2] = bx;
+                    barTieDetails[barCount][3] = barDataY[barDataY.length-1][1];
+                }
+                if(isTriType && (bx == 3) && i==0 ) {
+                    barTieDetails[barCount][5] = 1;
+                    barTieDetails[barCount][6] = barTieDetails[1][6];
+                }else if(isTriType && (bx == 3) && i==(by-3)){
+                    barTieDetails[barCount][5] = 1;
+                    barTieDetails[barCount][6] = tieCount;
+                    if(j==1){
+                        tieCount++;
+                    }
+                }else if(isTriType && (by == 3)){
+                    barTieDetails[barCount][5] = 1;
+                    if(barTieDetails[barCount][2]==1){
+                        barTieDetails[barCount][6] = barTieDetails[1][6];
+                    }else{
+                        barTieDetails[barCount][6] = barTieDetails[bx-2][6];
+                    }
+                }else{
+                    barTieDetails[barCount][5] = 2;
+                    barTieDetails[barCount][6] = tieCount;
+                    if(j!=0){
+                        tieCount++;
+                    }
+                }
+                barCount++;
+           }
+        }
+        for(int i=0;i<bx;i++){
+            barTieDetails[barCount][0] = barCount + 1;
+            barTieDetails[barCount][1] = by;
+            barTieDetails[barCount][2] = i + 1;
+            barTieDetails[barCount][3] = barDataY[i][1];
+            barTieDetails[barCount][4] = barDataX[barDataX.length-1][1];
+            if(barTieDetails[barCount][2]==1||barTieDetails[barCount][2]==bx){
+                barTieDetails[barCount][5] = 0;
+                barTieDetails[barCount][6] = 1;
+            }else if(isTriType && bx==3 && (barTieDetails[barCount][2]!=1) && (barTieDetails[barCount][2]!=bx)){
+                barTieDetails[barCount][5] = 1;
+                barTieDetails[barCount][6] = barTieDetails[barCount-2][6];
+            }else if(isTriType && by==3 && ((barTieDetails[barCount][2]==2) || (barTieDetails[barCount][2]==(bx-1)))){
+                barTieDetails[barCount][5] = 1;
+                barTieDetails[barCount][6] = barTieDetails[i][6];
+            }else{
+                barTieDetails[barCount][5] = 2;
+                barTieDetails[barCount][6] = barTieDetails[i][6];
+                tieCount++;
+            }
+            barCount++;
+        }
+        return barTieDetails;
+    }
+
+    public double length2Points(double x1, double x2, double y1, double y2){
+        double len = Math.sqrt(Math.pow((y2 - y1),2) + Math.pow((x2 - x1),2));
+        return len;
+    }
+
+}
+
+class Reinforcement {
+    public int barDia;
+    public int barFs;
+    public String barGradeDes;
+    public String barCountryCode;
+
+    public Reinforcement(int barDia, int barFs, String barGradeDes, String barCountryCode){
+        this.barDia = barDia;
+        this.barDia = barFs;
+        this.barGradeDes = barGradeDes;
+        this.barCountryCode = barCountryCode;
+    }
 }
